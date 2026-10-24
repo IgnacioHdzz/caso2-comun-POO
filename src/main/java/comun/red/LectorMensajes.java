@@ -1,10 +1,13 @@
 package comun.red;
 
+import java.io.IOException;
 import comun.protocolo.ConvertidorJson;
+import comun.protocolo.Mensaje;
+import comun.protocolo.MensajeInvalidoException;
 
 /**
  * Hilo que escucha una línea: lee mensajes uno tras otro y se los entrega al receptor.
- * Cuando la línea se corta, avisa al receptor con alDesconectarse().
+ * Cuando la línea se cierra o se corta, la cierra de su lado y avisa al receptor.
  */
 public class LectorMensajes implements Runnable {
 
@@ -20,8 +23,26 @@ public class LectorMensajes implements Runnable {
 
     @Override
     public void run() {
-        // TODO (Ignacio): ciclo: leerLinea(); si es null, terminar; si no, convertir a Mensaje
-        // y receptor.recibir(...). En el finally: conexion.cerrar() y receptor.alDesconectarse().
-        // (run() no puede declarar throws: la IOException se atrapa aquí.)
+        try {
+            String linea = conexion.leerLinea();
+            while (linea != null) {
+                entregar(linea);
+                linea = conexion.leerLinea();
+            }
+        } catch (IOException e) {
+            // La línea se cortó de golpe: se trata igual que un cierre normal (abajo, en el finally).
+        } finally {
+            conexion.cerrar();
+            receptor.alDesconectarse();
+        }
+    }
+
+    private void entregar(String pLinea) {
+        try {
+            Mensaje mensaje = convertidor.desdeJson(pLinea);
+            receptor.recibir(mensaje);
+        } catch (MensajeInvalidoException e) {
+            // Una línea mala no corta la conexión: se ignora y se sigue escuchando.
+        }
     }
 }
